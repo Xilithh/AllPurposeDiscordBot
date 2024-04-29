@@ -1,0 +1,7 @@
+logs/spring.log
+__pycache__/main.cpython-310.pyc
+__pycache__/config.cpython-310.pyc
+__pycache__/cmds.cpython-310.pyc
+Lavalink.jar
+config.py
+application.yml
