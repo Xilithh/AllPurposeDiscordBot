@@ -3,7 +3,10 @@ import typing
 import wavelink
 from discord.ext import commands
 
-@commands.command("profile")
+channelID = []
+GDCVC = []
+x = 1
+@commands.command(name="profile")
 async def profile(ctx, member: discord.Member = None):
     if member is None:
         member = ctx.author
@@ -13,7 +16,7 @@ async def profile(ctx, member: discord.Member = None):
     join = member.joined_at.strftime("%A, %B %d %Y @ %H:%M:%S")
     acc_age = member.created_at.strftime("%A, %B %d %Y @ %H:%M:%S")
 
-    guild_icon_url = ctx.guild.icon.url if ctx.guild.icon else None  # Get the guild icon URL if available
+    guild_icon_url = ctx.guild.icon.url if ctx.guild.icon else None
 
     profile = discord.Embed(title="User Profile", description=f'{name}', color=discord.Color.blue())
     profile.set_author(name=f'{ctx.guild.name}', icon_url=guild_icon_url)
@@ -21,58 +24,78 @@ async def profile(ctx, member: discord.Member = None):
     profile.add_field(name='Username', value=f'{member.mention}', inline=False)
     profile.add_field(name='Date Joined', value=join)
     profile.add_field(name='Account Created at', value=acc_age, inline=False)
-    profile.add_field(name ='Role(s)', value=f"{' '.join([role.mention for role in member.roles if role.name != '@everyone'])}", inline=False)
+    profile.add_field(name='Role(s)', value=' '.join([role.mention for role in member.roles if role.name != '@everyone']), inline=False)
     profile.set_footer(text=f'{ctx.author} generated this request')
 
     await ctx.send(embed=profile)
 
-@commands.command("play")
-async def play(ctx, search: str):
-    vc = typing.cast(wavelink.Player, ctx.voice_client)
-    if not vc:
-        vc = await ctx.author.voice.channel.connect(cls=wavelink.Player, self_deaf=True)
 
-    if ctx.author.voice.channel.id != vc.channel.id:
-        return await ctx.reply("You must be in the same voice channel as the bot.")
-
-    song = (await wavelink.Playable.search(search, source=wavelink.TrackSource.SoundCloud))[0]
-
-    if not song:
-        return await ctx.reply("Could not find the requested track.")
-    await vc.play(song)
-    await ctx.reply(f"Now playing: '{song.title}' - '{song.author}'")
-
-
-
-
-
-
-@commands.command("leave")
-async def leave(ctx):
-    vc = typing.cast(wavelink.Player, ctx.voice_client)
-    if not vc:
-        return await ctx.reply("Not currently in a voice channel.")
     
-    if ctx.author.voice.channel.id != vc.channel.id:
-        return await ctx.reply("You must be in the same voice channel as the bot.")
-    
-    await vc.disconnect()
-    return await ctx.reply("Left the voice channel.")
+def setup_commands(bot):
+    @bot.command(name="play")
+    async def play(ctx, *, search: str):
+        if not ctx.voice_client:
+            if ctx.author.voice:
+                await ctx.author.voice.channel.connect(cls=wavelink.Player)
+                
+            else:
+                await ctx.send("You need to be in a voice channel to play music.")
+                return
 
-@commands.command("stop")
-async def stop(ctx):
-    vc = typing.cast(wavelink.Player, ctx.voice_client)
-    if not vc:
-        return await ctx.reply("Not currently in a voice channel.")
+        vc: wavelink.Player = ctx.voice_client
+        
+        DCVC = ctx.voice_client
+        GDCVC.append(DCVC)
+        
+        text_channel_id = ctx.channel.id
+        channelID.append(text_channel_id)
+        
+        songs: list[wavelink.Track] = await wavelink.Playable.search(search, source=wavelink.TrackSource.SoundCloud)
+        if not songs:
+            await ctx.send("No tracks found on SoundCloud.")
+            return
+
+        vc.queue.put(songs[0])
+        queue_position = len(vc.queue)
+
+        if not vc.playing:
+            next_track = vc.queue.get()
+            await vc.play(next_track)
+            
+            play = discord.Embed(title='Now Playing:', description=f'{songs[0].title}', color=discord.Color.purple())
+      
+            play.set_thumbnail(url=songs[0].artwork)
+            play.add_field(name='Author', value=f'{songs[0].author}', inline=False)
     
-    if ctx.author.voice.channel.id != vc.channel.id:
-        return await ctx.reply("You must be in the same voice channel as the bot.")
+            minutes, seconds = divmod(songs[0].length // 1000, 60)
+            play.add_field(name='Length', value=f'{minutes} minutes {seconds} seconds', inline=False)
+            play.set_footer(text=f'{ctx.author} requested this song')
     
-    await vc.stop()
-    return await ctx.reply("Music player stopped.")
+    
+            await ctx.send(embed=play)
+        else:
+            
+            Qplay = discord.Embed(title='Queued', description=f'{songs[0].title}', color=discord.Color.purple())
+            Qplay.set_footer(text=f'Position #{queue_position}')
+            
+            
+            await ctx.send(embed=Qplay)
+
+
+    @bot.command(name="skip")
+    async def skip(ctx):
+        vc: wavelink.Player = ctx.voice_client
+        if vc and vc.playing:
+            await vc.stop()
+
+    @bot.command(name="stop")
+    async def stop(ctx):
+        vc: wavelink.Player = ctx.voice_client
+        if vc:
+            await vc.stop()
+            vc.queue.clear()
+            await vc.disconnect()
+            await ctx.send("Stopped the music and cleared the queue.")
 
 def setup(bot):
     bot.add_command(profile)
-    bot.add_command(play)
-    bot.add_command(leave)
-    bot.add_command(stop)
